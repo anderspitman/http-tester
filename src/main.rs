@@ -1,7 +1,8 @@
 use std::net::{TcpStream};
 use std::io;
 use std::io::{Read, Write};
-use std::str;
+use std::{env, str};
+use std::{thread, time};
 
 
 const MAX_RESPONSE_BYTES: usize = 10000;
@@ -77,6 +78,14 @@ impl HttpRequestBuilder {
 
 fn main() -> io::Result<()> {
 
+    let args: Vec<String> = env::args().collect();
+    println!("{:?}", args);
+    if args.len() != 2 {
+        return Err(io::Error::new(io::ErrorKind::Other, "Invalid args"));
+    }
+
+    let url = &args[1];
+
     //let host = "localhost";
     //let port = 8081;
     let host = "lf-proxy.iobio.io";
@@ -84,7 +93,7 @@ fn main() -> io::Result<()> {
 
     let req = HttpRequestBuilder::new()
         .method("GET")
-        .path("/")
+        .path(&url)
         .header("Host", host)
         .header("Connection", "close")
         .header("User-Agent", "rusttp")
@@ -100,9 +109,29 @@ fn main() -> io::Result<()> {
     stream.write(&req.as_bytes())?;
 
     let mut buf = vec![0; MAX_RESPONSE_BYTES];
-    stream.read(&mut buf)?;
+    let chunk_size = 16;
+    let mut index = 0;
 
-    println!("{}", str::from_utf8(&buf).expect("error decoding"));
+    loop {
+        match stream.read(&mut buf[index..(index + chunk_size)]) {
+            Ok(n) => {
+                if n == 0 {
+                    break;
+                }
+
+                println!("\n");
+                index += n;
+            },
+            Err(e) => {
+                return Err(e);
+            },
+        }
+
+        io::stdout().write(&buf)?;
+        thread::sleep(time::Duration::from_millis(100));
+    }
+
+    //println!("{}", str::from_utf8(&buf).expect("error decoding"));
 
     Ok(())
 }
