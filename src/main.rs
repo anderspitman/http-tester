@@ -3,6 +3,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::{env, str};
 use std::{thread, time};
+use url::{Url};
 
 
 const BYTES_PER_KBYTE: usize = 1024;
@@ -82,36 +83,33 @@ impl HttpRequestBuilder {
 fn main() -> io::Result<()> {
 
     let args: Vec<String> = env::args().collect();
-    println!("{:?}", args);
+    eprintln!("{:?}", args);
     if args.len() != 3 {
         return Err(io::Error::new(io::ErrorKind::Other, "Invalid args"));
     }
 
     let bitrate_kbps = &args[1].parse::<usize>().expect("failed to convert bitrate");
     let delay_ms = (MS_PER_SECOND * KBIT_PER_KBYTE * MAX_CHUNK_BYTES) / bitrate_kbps / BYTES_PER_KBYTE;
-    println!("{}", delay_ms);
-    let url = &args[2];
+    eprintln!("{}", delay_ms);
+    let url = Url::parse(&args[2]).expect("failed parsing url");
 
-    //let host = "localhost";
-    //let port = 8081;
-    //let host = "lf-proxy.iobio.io";
-    //let port = 80;
-    let host = "138.68.54.55";
-    let port = 9001;
+    let host = url.host_str().expect("failed parsing host");
 
     let req = HttpRequestBuilder::new()
         .method("GET")
-        .path(&url)
+        .path(&url.path())
         .header("Host", host)
         .header("Connection", "close")
         .header("User-Agent", "rusttp")
         .header("Accept", "*/*")
         .build();
 
-    //let stream = TcpStream::connect("lf-proxy.iobio.io:80")?;
-    let addr = format!("{}:{}", host, port);
-    println!("Sending request to {}:", addr);
-    println!("{}", req.to_string());
+    let addr = match url.port() {
+        Some(port) => format!("{}:{}", host, port),
+        None => host.to_string(),
+    };
+
+    eprintln!("{}", req.to_string());
 
     let mut stream = TcpStream::connect(&addr)?;
     stream.write(&req.as_bytes())?;
@@ -140,8 +138,6 @@ fn main() -> io::Result<()> {
         //thread::sleep(time::Duration::from_millis(5));
         thread::sleep(time::Duration::from_millis(delay_ms as u64));
     }
-
-    //println!("{}", str::from_utf8(&buf).expect("error decoding"));
 
     Ok(())
 }
