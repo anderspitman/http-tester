@@ -5,7 +5,10 @@ use std::{env, str};
 use std::{thread, time};
 
 
-const MAX_RESPONSE_BYTES: usize = 10000;
+const BYTES_PER_KBYTE: usize = 1024;
+const MAX_CHUNK_BYTES: usize = 16*BYTES_PER_KBYTE;
+const MS_PER_SECOND: usize = 1000;
+const KBIT_PER_KBYTE: usize = 8;
 
 struct HttpRequest {
     method: String,
@@ -80,16 +83,21 @@ fn main() -> io::Result<()> {
 
     let args: Vec<String> = env::args().collect();
     println!("{:?}", args);
-    if args.len() != 2 {
+    if args.len() != 3 {
         return Err(io::Error::new(io::ErrorKind::Other, "Invalid args"));
     }
 
-    let url = &args[1];
+    let bitrate_kbps = &args[1].parse::<usize>().expect("failed to convert bitrate");
+    let delay_ms = (MS_PER_SECOND * KBIT_PER_KBYTE * MAX_CHUNK_BYTES) / bitrate_kbps / BYTES_PER_KBYTE;
+    println!("{}", delay_ms);
+    let url = &args[2];
 
     //let host = "localhost";
     //let port = 8081;
-    let host = "lf-proxy.iobio.io";
-    let port = 80;
+    //let host = "lf-proxy.iobio.io";
+    //let port = 80;
+    let host = "138.68.54.55";
+    let port = 9001;
 
     let req = HttpRequestBuilder::new()
         .method("GET")
@@ -108,19 +116,20 @@ fn main() -> io::Result<()> {
     let mut stream = TcpStream::connect(&addr)?;
     stream.write(&req.as_bytes())?;
 
-    let mut buf = vec![0; MAX_RESPONSE_BYTES];
     let chunk_size = 16;
     let mut index = 0;
 
     loop {
-        match stream.read(&mut buf[index..(index + chunk_size)]) {
+
+        let mut buf = vec![0; MAX_CHUNK_BYTES];
+
+        //match stream.read(&mut buf[index..(index + chunk_size)]) {
+        match stream.read(&mut buf) {
             Ok(n) => {
                 if n == 0 {
                     break;
                 }
-
-                println!("\n");
-                index += n;
+                //index += n;
             },
             Err(e) => {
                 return Err(e);
@@ -128,7 +137,8 @@ fn main() -> io::Result<()> {
         }
 
         io::stdout().write(&buf)?;
-        thread::sleep(time::Duration::from_millis(100));
+        //thread::sleep(time::Duration::from_millis(5));
+        thread::sleep(time::Duration::from_millis(delay_ms as u64));
     }
 
     //println!("{}", str::from_utf8(&buf).expect("error decoding"));
