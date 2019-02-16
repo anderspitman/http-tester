@@ -111,6 +111,8 @@ fn main() -> io::Result<()> {
 
     eprintln!("{}", req.to_string());
 
+    eprintln!("{:?}", addr);
+
     let mut stream = TcpStream::connect(&addr)?;
     stream.write(&req.as_bytes())?;
 
