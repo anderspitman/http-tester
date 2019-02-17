@@ -1,41 +1,34 @@
-use std::io;
 use tokio::prelude::*;
-use tokio::io::copy;
-use tokio::net::TcpListener;
+use tokio::io;
+use tokio::net::TcpStream;
+use http_tester::{HttpRequestBuilder};
 
 fn main() -> io::Result<()> {
-    // Bind the server's socket.
-    let addr = "127.0.0.1:12345".parse()
-        .expect("failed to parse address");
-    println!("{:?}", addr);
-    let listener = TcpListener::bind(&addr)
-        .expect("unable to bind TCP listener");
+    let addr = "127.0.0.1:9001".parse().expect("fail parsing address");
+    let client = TcpStream::connect(&addr).and_then(|stream| {
 
-    // Pull out a stream of sockets for incoming connections
-    let server = listener.incoming()
-        .map_err(|e| eprintln!("accept failed = {:?}", e))
-        .for_each(|sock| {
-            // Split up the reading and writing parts of the
-            // socket.
-            let (reader, writer) = sock.split();
+        let request = HttpRequestBuilder::new()
+            .method("GET")
+            //.path(&url.path())
+            .path("/")
+            .header("Host", "localhost")
+            .header("Connection", "close")
+            .header("User-Agent", "rusttp")
+            .header("Accept", "*/*")
+            .build();
 
-            // A future that echos the data and returns how
-            // many bytes were copied...
-            let bytes_copied = copy(reader, writer);
+        eprintln!("{}", request.to_string());
 
-            // ... after which we'll print what happened.
-            let handle_conn = bytes_copied.map(|amt| {
-                println!("wrote {:} bytes", amt.0)
-            }).map_err(|err| {
-                eprintln!("IO error {:?}", err)
-            });
+        io::write_all(stream, request.as_bytes()).then(|result| {
+          println!("wrote to stream; success={:?}", result.is_ok());
+          Ok(())
+        })
+    })
+    .map_err(|err| {
+        println!("connection error = {:?}", err);
+    });
 
-            // Spawn the future as a concurrent task.
-            tokio::spawn(handle_conn)
-        });
-
-    // Start the Tokio runtime
-    tokio::run(server);
+    tokio::run(client);
 
     Ok(())
 }
